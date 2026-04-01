@@ -140,9 +140,15 @@ class WPVibe_CLI {
 			$command = substr( $command, 3 );
 		}
 
+		// db query needs < and > for SQL comparisons — skip those chars for that command.
+		$is_db_query = ( strpos( $command, 'db query' ) === 0 );
 		foreach ( self::SHELL_CHARS as $char ) {
+			if ( $is_db_query && ( '<' === $char || '>' === $char ) ) {
+				continue;
+			}
 			if ( strpos( $command, $char ) !== false ) {
-				return new WP_Error( 'shell_chars', __( 'Command contains disallowed characters.', 'vibe-ai' ), array( 'status' => 400 ) );
+				/* translators: %s: the blocked character */
+				return new WP_Error( 'shell_chars', sprintf( __( 'Command contains disallowed character: %s', 'vibe-ai' ), $char ), array( 'status' => 400 ) );
 			}
 		}
 
@@ -796,8 +802,11 @@ class WPVibe_CLI {
 
 		$sql = trim( implode( ' ', $positional ) );
 		if ( empty( $sql ) ) {
-			return $this->error_result( __( 'SQL query required. Example: db query "SELECT * FROM wp_posts LIMIT 10"', 'vibe-ai' ) );
+			return $this->error_result( __( 'SQL query required. Example: db query "SELECT * FROM {prefix}posts LIMIT 10"', 'vibe-ai' ) );
 		}
+
+		// Replace {prefix} placeholder with actual table prefix.
+		$sql = str_replace( '{prefix}', $wpdb->prefix, $sql );
 
 		// Validate: SELECT only.
 		// Strip SQL comments to prevent keyword bypass.
@@ -833,14 +842,18 @@ class WPVibe_CLI {
 			return $this->error_result( __( 'Multiple SQL statements are not allowed.', 'vibe-ai' ) );
 		}
 
-		// Enforce LIMIT.
+		// Enforce LIMIT. --limit flag overrides default (capped at 1000).
+		$default_limit = 100;
+		if ( ! empty( $flags['limit'] ) && is_numeric( $flags['limit'] ) ) {
+			$default_limit = min( (int) $flags['limit'], 1000 );
+		}
 		$sql = rtrim( $sql, '; ' );
 		if ( preg_match( '/\bLIMIT\s+(\d+)/i', $sql, $m ) ) {
 			$sql = preg_replace_callback( '/\bLIMIT\s+(\d+)/i', function ( $m ) {
 				return 'LIMIT ' . min( (int) $m[1], 1000 );
 			}, $sql );
 		} else {
-			$sql .= ' LIMIT 100';
+			$sql .= ' LIMIT ' . $default_limit;
 		}
 
 		// Execute.

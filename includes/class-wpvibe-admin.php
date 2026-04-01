@@ -93,10 +93,11 @@ class WPVibe_Admin {
 
 	/**
 	 * Check if site is connected to WPVibe.
+	 * Connected = received an authenticated WPVibe request within the last 30 days.
 	 */
 	private function is_connected() {
-		$token = get_option( 'wpvibe_auth_token' );
-		return ! empty( $token );
+		$last_active = (int) get_option( 'wpvibe_last_active', 0 );
+		return $last_active > 0 && ( time() - $last_active ) < 30 * DAY_IN_SECONDS;
 	}
 
 	/**

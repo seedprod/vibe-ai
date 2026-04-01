@@ -734,6 +734,14 @@ class WPVibe_REST {
 	 * @return WP_REST_Response Unmodified response.
 	 */
 	public function track_rest_changes( $response, $server, $request ) {
+		// Record last WPVibe activity for the admin "Connected" indicator.
+		if ( $request->get_header( 'x_wpvibe' ) === '1' && $response->get_status() < 400 ) {
+			$last = (int) get_option( 'wpvibe_last_active', 0 );
+			if ( time() - $last > 3600 ) {
+				update_option( 'wpvibe_last_active', time(), false );
+			}
+		}
+
 		$method = $request->get_method();
 
 		// Only track write operations that succeeded.
